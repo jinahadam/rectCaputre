@@ -43,6 +43,8 @@ class CaptureViewController: UIViewController {
     
     var flashLayer: CALayer?
     
+    var detectRectable = true
+    var wantsPhoto = false
     //MARK: - View Lifecycle
     
     override func viewDidLoad() {
@@ -82,6 +84,11 @@ class CaptureViewController: UIViewController {
     @objc func didTapView(_ tap: UITapGestureRecognizer) {
         
         AudioServicesPlayAlertSound(cameraShutterSoundID)
+        
+        boxLayer.opacity = 0
+        detectRectable = false
+        wantsPhoto = true
+        
         flashScreen()
         
         //save the photo
@@ -157,10 +164,6 @@ class CaptureViewController: UIViewController {
             //error
         }
         
-        
-        
-        
-        
     }
     
     private func displayQuad(points: (tl: CGPoint, tr: CGPoint, br: CGPoint, bl: CGPoint)) {
@@ -193,12 +196,18 @@ class CaptureViewController: UIViewController {
         })
     }
     
+    private func capture(image: CGImage, rectFeature: CIRectangleFeature) {
+        
+    }
+    
 }
 
 extension CaptureViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-      
+       
+        guard wantsPhoto || detectRectable else { return }
+        
         let image = CIImage(cvImageBuffer: imageBuffer)
         for feature in rectDetector.features(in: image, options: nil) {
             guard let rectFeature = feature as? CIRectangleFeature else { continue }
@@ -224,6 +233,12 @@ extension CaptureViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
                 
                 self.displayQuad(points: (tl: tl, tr: tr, br: br, bl: bl))
                 
+                if wantsPhoto {
+                    wantsPhoto = false
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        self.capture(image: image, rectFeature: rectFeature)
+                    }
+                }
             }
         }
         
@@ -234,5 +249,6 @@ extension CaptureViewController: CAAnimationDelegate {
     func animationDidStop(_ anim: CAAnimation, finished flag: Bool) {
         flashLayer?.removeFromSuperlayer()
         flashLayer = nil
+        detectRectable = true
     }
 }
